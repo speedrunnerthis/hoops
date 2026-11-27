@@ -5,13 +5,22 @@ try{firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore()}catc
 try{rtdb=firebase.database()}catch(e){console.warn(e)}
 const $=id=>document.getElementById(id),show=id=>{['auth','menu','statp','queue'].forEach(s=>$(s).classList.add('hide'));if(id)$(id).classList.remove('hide')};
 const em=n=>n.toLowerCase().replace(/[^a-z0-9]/g,'')+'@54hoops.app';
+const msg=e=>({
+  'auth/weak-password':'Password must be at least 6 characters.',
+  'auth/email-already-in-use':'That username is taken.',
+  'auth/invalid-email':'Enter a username (letters or numbers).',
+  'auth/missing-password':'Enter a password.',
+  'auth/invalid-credential':'Wrong username or password.',
+  'auth/too-many-requests':'Too many tries. Wait a bit and try again.',
+  'auth/network-request-failed':'Network problem. Check your connection.'
+}[e.code]||'Something went wrong. Try again.');
 async function register(n,p){
   const c=await auth.createUserWithEmailAndPassword(em(n),p);
   await db.runTransaction(async t=>{const r=db.doc('counters/users'),s=await t.get(r),k=(s.exists?s.data().n:0)+1;
     t.set(r,{n:k});t.set(db.doc('users/'+c.user.uid),{id:k,name:n,ankles:0,made:0,perfects:0,blocks:0})});
 }
-$('reg').onclick=async()=>{try{await register($('u').value.trim(),$('p').value)}catch(e){$('err').textContent=e.message}};
-$('login').onclick=async()=>{try{await auth.signInWithEmailAndPassword(em($('u').value),$('p').value)}catch(e){$('err').textContent=e.message}};
+$('reg').onclick=async()=>{try{await register($('u').value.trim(),$('p').value)}catch(e){console.error(e);$('err').textContent=msg(e)}};
+$('login').onclick=async()=>{try{await auth.signInWithEmailAndPassword(em($('u').value),$('p').value)}catch(e){console.error(e);$('err').textContent=msg(e)}};
 // Guests sign in anonymously so the database rules can tell players apart. If that fails, they can still play vs the bot offline.
 $('guest').onclick=async()=>{prof=null;try{if(!auth)throw 0;await auth.signInAnonymously()}catch(e){$('who').textContent='Guest (offline)';show('menu')}};
 $('out').onclick=()=>{auth&&auth.signOut();show('auth')};

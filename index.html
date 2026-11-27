@@ -1,19 +1,87 @@
-54’s HOOPS
-Create an account to save your stats
-Log inCreate account
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>54’s HOOPS</title>
 
-Play as guest (stats not saved)
-54’s HOOPS
+<!-- Game stylesheet, served from the repo through raw.githack (correct MIME types, unlike raw.githubusercontent.com) -->
+<link rel="stylesheet" href="https://raw.githack.com/speedrunnerthis/hoops/main/style.css">
+</head>
+<body>
 
-Play online (queue)Play vs botStatsLog out
-WASD move · Mouse look · E dribble (4 max) · Hold F shoot, release at the top · Click/R steal · Q jump/block (direction locks in air)
-Career stats
+<canvas id="c"></canvas>
 
-Back
-Finding opponent…
+<!-- LOGIN -->
+<div id="auth" class="screen">
+  <div class="card">
+    <h1>54’s HOOPS</h1>
+    <p class="sub">Create an account to save your stats</p>
+    <input id="u" placeholder="Username" autocomplete="username" maxlength="20">
+    <input id="p" type="password" placeholder="Password" autocomplete="current-password">
+    <div class="row">
+      <button id="login">Log in</button>
+      <button id="reg">Create account</button>
+    </div>
+    <div id="err"></div>
+    <button id="guest" class="ghost">Play as guest (stats not saved)</button>
+  </div>
+</div>
 
-Searching the queue
-0 : 0
-PERFECT
+<!-- MAIN MENU -->
+<div id="menu" class="screen hide">
+  <div class="card">
+    <h1>54’s HOOPS</h1>
+    <p class="sub" id="who"></p>
+    <button id="online">Play online (queue)</button>
+    <button id="bot">Play vs bot</button>
+    <button id="stats">Stats</button>
+    <button id="out" class="ghost">Log out</button>
+    <p class="help">WASD move · Mouse look · E dribble (4 max) · Hold F shoot, release at the top · Click/R steal · Q jump/block (direction locks in air)</p>
+  </div>
+</div>
 
+<!-- STATS -->
+<div id="statp" class="screen hide">
+  <div class="card">
+    <h1>Career stats</h1>
+    <div id="grid"></div>
+    <button id="back">Back</button>
+  </div>
+</div>
 
+<!-- QUEUE -->
+<div id="queue" class="screen hide">
+  <div class="card">
+    <h1>Finding opponent…</h1>
+    <p class="sub" id="qt">Searching the queue</p>
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hide">
+  <div id="score"><span id="s0">0</span> : <span id="s1">0</span></div>
+  <div id="msg"></div>
+  <div id="perfect">PERFECT</div>
+  <div id="meter"><div id="fill"></div></div>
+  <div id="arc">
+    <svg viewBox="0 0 44 44">
+      <circle class="bg" cx="22" cy="22" r="18" pathLength="100"></circle>
+      <circle id="arcf" cx="22" cy="22" r="18" pathLength="100"></circle>
+    </svg>
+  </div>
+</div>
+
+<!-- Libraries (pinned: your code uses outputEncoding/sRGBEncoding, which newer three.js removed) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- Add this later if you go with Realtime Database for live play:
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script> -->
+
+<!-- Game code (must come after the markup and libraries above) -->
+<script src="https://raw.githack.com/speedrunnerthis/hoops/main/script.js"></script>
+</body>
+</html>

@@ -1,7 +1,8 @@
 // ===== FIREBASE (paste your config) =====
-const FB={apiKey:"YOUR_API_KEY",authDomain:"YOUR_PROJECT.firebaseapp.com",projectId:"YOUR_PROJECT",appId:"YOUR_APP_ID"};
-let auth,db,prof=null,uid=null;
+const FB={apiKey:"AIzaSyCgIU_85HAccqFgZd1u4BQsbOEtY4r00sE",authDomain:"livegame-2212.firebaseapp.com",databaseURL:"https://livegame-2212-default-rtdb.firebaseio.com",projectId:"livegame-2212",storageBucket:"livegame-2212.firebasestorage.app",messagingSenderId:"493917811272",appId:"1:493917811272:web:ab31d9ecc9c631fdcc1e7d"};
+let auth,db,rtdb,prof=null,uid=null;
 try{firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore()}catch(e){console.warn(e)}
+try{rtdb=firebase.database()}catch(e){console.warn(e)}
 const $=id=>document.getElementById(id),show=id=>{['auth','menu','statp','queue'].forEach(s=>$(s).classList.add('hide'));if(id)$(id).classList.remove('hide')};
 const em=n=>n.toLowerCase().replace(/[^a-z0-9]/g,'')+'@54hoops.app';
 async function register(n,p){
@@ -11,9 +12,10 @@ async function register(n,p){
 }
 $('reg').onclick=async()=>{try{await register($('u').value.trim(),$('p').value)}catch(e){$('err').textContent=e.message}};
 $('login').onclick=async()=>{try{await auth.signInWithEmailAndPassword(em($('u').value),$('p').value)}catch(e){$('err').textContent=e.message}};
-$('guest').onclick=()=>{prof=null;$('who').textContent='Guest';show('menu')};
+// Guests sign in anonymously so the database rules can tell players apart. If that fails, they can still play vs the bot offline.
+$('guest').onclick=async()=>{prof=null;try{if(!auth)throw 0;await auth.signInAnonymously()}catch(e){$('who').textContent='Guest (offline)';show('menu')}};
 $('out').onclick=()=>{auth&&auth.signOut();show('auth')};
-if(auth)auth.onAuthStateChanged(async u=>{if(!u)return;uid=u.uid;
+if(auth)auth.onAuthStateChanged(async u=>{if(!u)return;uid=u.uid;if(u.isAnonymous){prof=null;$('who').textContent='Guest';show('menu');return}
   for(let i=0;i<8;i++){const s=await db.doc('users/'+uid).get();if(s.exists){prof=s.data();break}await new Promise(r=>setTimeout(r,500))}
   if(prof){$('who').textContent=`#${prof.id}  ${prof.name}`;show('menu')}});
 function stat(k){if(!prof)return;prof[k]++;db.doc('users/'+uid).update({[k]:firebase.firestore.FieldValue.increment(1)}).catch(()=>{})}

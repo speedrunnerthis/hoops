@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>54’s HOOPS</title>
-
-<!-- Game stylesheet, served from the repo through raw.githack (correct MIME types, unlike raw.githubusercontent.com) -->
-<link rel="stylesheet" href="https://raw.githack.com/speedrunnerthis/hoops/main/style.css">
+<!-- Hidden until the stylesheet is loaded so there's no unstyled flash -->
+<style>html{background:#0d0d12}body{visibility:hidden;margin:0}</style>
 </head>
 <body>
 
@@ -73,15 +72,70 @@
   </div>
 </div>
 
-<!-- Libraries (pinned: your code uses outputEncoding/sRGBEncoding, which newer three.js removed) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<!-- Add this later if you go with Realtime Database for live play:
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script> -->
+<!-- Shown only if something fails to load -->
+<div id="loaderr" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:99;padding:14px 18px;background:#400;color:#fff;font:14px system-ui,sans-serif"></div>
 
-<!-- Game code (must come after the markup and libraries above) -->
-<script src="https://raw.githack.com/speedrunnerthis/hoops/main/script.js"></script>
+<script>
+/*
+  Loader. raw.githubusercontent.com serves every file as text/plain, and browsers refuse to
+  run <script src> / <link rel=stylesheet> with that type. So we fetch() the text instead
+  (raw.githubusercontent.com allows this) and inject it into the page ourselves.
+*/
+(async function () {
+  var RAW = 'https://raw.githubusercontent.com/speedrunnerthis/hoops/main/';
+
+  function fail(what, e) {
+    console.error(what, e);
+    var box = document.getElementById('loaderr');
+    box.style.display = 'block';
+    box.textContent = 'Could not load ' + what + '. If you are on a school or work device, the network may be blocking it. (' + (e && e.message || e) + ')';
+    document.body.style.visibility = 'visible';
+  }
+
+  function getText(file) {
+    return fetch(RAW + file).then(function (r) {
+      if (!r.ok) throw new Error(file + ' returned HTTP ' + r.status);
+      return r.text();
+    });
+  }
+
+  // Normal external libraries (these are served with the right type, so <script src> is fine)
+  function lib(src) {
+    return new Promise(function (ok, bad) {
+      var s = document.createElement('script');
+      s.src = src; s.onload = ok;
+      s.onerror = function () { bad(new Error('failed: ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // 1) CSS from the repo
+  try {
+    var css = await getText('style.css');
+    var st = document.createElement('style');
+    st.textContent = css;
+    document.head.appendChild(st);
+    document.body.style.visibility = 'visible';
+  } catch (e) { return fail('style.css', e); }
+
+  // 2) Libraries, in order. three.js is pinned to r128 because script.js uses outputEncoding/sRGBEncoding.
+  try {
+    await lib('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
+    await lib('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+    await lib('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js');
+    await lib('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js');
+    // Uncomment for live play with Realtime Database:
+    // await lib('https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js');
+  } catch (e) { return fail('a library (three.js / Firebase)', e); }
+
+  // 3) Game code from the repo, run as a normal classic script
+  try {
+    var code = await getText('script.js');
+    var sc = document.createElement('script');
+    sc.textContent = code + '\n//# sourceURL=hoops/script.js';
+    document.body.appendChild(sc);
+  } catch (e) { return fail('script.js', e); }
+})();
+</script>
 </body>
 </html>

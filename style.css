@@ -64,3 +64,28 @@ button.ghost:hover{background:#ffffff10}
   0%{opacity:0;transform:translate(-50%,10px) scale(.6)}
   20%{opacity:1;transform:translate(-50%,0) scale(1.15)}
   100%{opacity:0;transform:translate(-50%,-40px) scale(1)}}
+
+
+/* ---------- Settings, pause menu, queue list, mouse hint ---------- */
+.card.wide{width:min(94vw,560px)}
+.tabs{display:flex;gap:8px}
+.tabs button{flex:1;background:transparent;border:1px solid #ffffff2a;color:#ccd}
+.tabs button.on{background:#d9611a;border-color:#d9611a;color:#fff}
+#binds{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto;padding-right:4px}
+.bind{display:flex;align-items:center;gap:8px;font-size:14px;text-align:left}
+.bind span{flex:1;color:#ccd}
+.bind button.key{flex:0 0 120px;padding:8px 6px;font-size:13px;background:#0d0d12;border:1px solid #ffffff22;font-weight:600}
+.bind button.key:hover{border-color:#ff7a2a88}
+.bind button.key.on{border-color:#ff7a2a;color:#ff7a2a}
+#pu{display:flex;flex-direction:column;gap:14px}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:#ccd;text-align:left}
+.opt b{color:#ff7a2a;min-width:46px;text-align:right}
+.opt input[type=range]{flex:1;padding:0;accent-color:#ff7a2a}
+.opt.check{justify-content:flex-start}
+.opt.check input{width:18px;height:18px;padding:0;accent-color:#ff7a2a}
+#pause.screen{background:rgba(8,8,12,.74);z-index:12}
+#qlist{list-style:none;margin:0;padding:0;max-height:160px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+#qlist li{background:#0d0d12;border-radius:8px;padding:8px 12px;font-size:14px;text-align:left}
+#qlist li.me{border:1px solid #ff7a2a66;color:#ffb27a}
+#lockhint{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:6;padding:8px 16px;border-radius:999px;background:#000b;font-size:14px;pointer-events:none}
+#score small{font-size:14px;letter-spacing:0;font-weight:700;vertical-align:middle}

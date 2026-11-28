@@ -11,6 +11,7 @@ const wr=a=>{a%=Math.PI*2;return a>Math.PI?a-Math.PI*2:a<-Math.PI?a+Math.PI*2:a}
 const H={x:0,z:-6.2},RIM=3.05,R3=6.75,WIN=11,DUR=.5,SR=1.5;
 let R,S,CAM,P=[],ball,keys={},cy=0,cp=.25,running=false,paused=false,last=0,loose=null,flight=null,score=[0,0],t=0,ready=false,raf=0,togSpr=false,lastUnlock=0,mt;
 let NET=null,JN=null,pairing=false,OPP='BOT';
+const ADM={frz:0,fly:false,dis:{shots:0,steals:0,blocks:0}};// admin effects on the local player
 
 // ===== UI added by this script (settings, Esc menu, queue list) =====
 document.body.insertAdjacentHTML('beforeend',`
@@ -28,7 +29,7 @@ document.body.insertAdjacentHTML('beforeend',`
 <button id="rok">Continue</button><button id="rmenu" class="ghost">Main Menu</button><p class="help" id="phelp">Press Esc again to continue</p></div></div>
 <div id="lockhint" class="hide">Click the game to capture your mouse</div>
 <div id="xh" style="position:fixed;left:50%;top:50%;width:8px;height:8px;margin:-4px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px #0008;display:none;z-index:5;pointer-events:none"></div>`);
-$('stats').insertAdjacentHTML('afterend','<button id="invb">Inventory and Shop</button><button id="opts">Settings</button>');
+$('stats').insertAdjacentHTML('afterend','<button id="lbb">Leaderboard</button><button id="invb">Inventory and Shop</button><button id="conb" class="hide">Admin console</button><button id="opts">Settings</button>');
 $('qt').parentNode.insertAdjacentHTML('beforeend','<p class="sub" id="qs"></p><ul id="qlist"></ul><button id="qbot">Play vs bot while you wait</button><button id="qexit" class="ghost">Exit queue</button>');
 const SCR=['auth','menu','statp','queue','settings'];
 const show=id=>{SCR.forEach(s=>$(s).classList.add('hide'));if(id)$(id).classList.remove('hide');setPresence(id)};
@@ -109,6 +110,41 @@ document.head.appendChild(Object.assign(document.createElement('style'),{textCon
 #coins{position:absolute;top:22px;left:22px;font-size:20px;font-weight:800;background:#000a;padding:6px 14px;border-radius:999px;color:#ffd23a}#coins b{color:#fff}.cgain{position:absolute;left:100%;margin-left:8px;color:#3dff7a;animation:cg 1.1s ease-out forwards}@keyframes cg{to{opacity:0;transform:translateY(-22px)}}
 #meter::after{height:14%}`}));
 SCR.push('invs');ecoLoad();
+// ===== ADMIN (account #1 only) + BANS =====
+const isAdmin=()=>!!prof&&prof.id===1;let conOpen=false,cmdRef=null,lastCmd=0;
+const nameBanned=async n=>{try{return(await db.doc('bans/'+em(n)).get()).exists}catch(e){return false}};
+function banScreen(){try{localStorage.setItem('hoops.banned','1')}catch(e){}
+  if(!$('banned'))document.body.insertAdjacentHTML('beforeend','<div id="banned" style="position:fixed;inset:0;z-index:99999;background:#120000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;font-family:system-ui,sans-serif;padding:24px"><div style="font-size:64px">🚫</div><h1 style="color:#ff4a4a;font-size:44px;margin:0">You are banned</h1><p style="color:#c99;max-width:420px">Your account was removed and this device can no longer play 54’s Hoops.</p></div>');
+  try{if(running)stopLoop();if(NET)netClose()}catch(e){}}
+async function selfBan(){banScreen();try{if(db&&uid){await db.doc('leaderboard/'+uid).delete().catch(()=>{});await db.doc('users/'+uid).delete()}}catch(e){}try{auth.currentUser&&await auth.currentUser.delete()}catch(e){try{await auth.signOut()}catch(e2){}}}
+try{if(localStorage.getItem('hoops.banned'))banScreen()}catch(e){}
+document.body.insertAdjacentHTML('beforeend','<div id="con" class="hide"><div id="conlog"></div><input id="conin" placeholder="/help" autocomplete="off" spellcheck="false"></div>');
+document.head.appendChild(Object.assign(document.createElement('style'),{textContent:'#con{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#000d;border-top:2px solid #ff7a2a;padding:10px;font:13px ui-monospace,monospace}#conlog{max-height:30vh;overflow:auto;color:#9f9;white-space:pre-wrap;margin-bottom:6px}#conlog .bad{color:#ff7b7b}#conin{width:100%;background:#000;color:#fff;border:1px solid #ffffff30;font:inherit;padding:8px;border-radius:6px}'}));
+function conLog(m,bad){const d=document.createElement('div');if(bad)d.className='bad';d.textContent=m;$('conlog').appendChild(d);$('conlog').scrollTop=1e9}
+function toggleCon(on){if(on&&!isAdmin())return;conOpen=on;$('con').classList.toggle('hide',!on);if(on){keys={};try{document.exitPointerLock()}catch(e){}setTimeout(()=>$('conin').focus(),30);if(!$('conlog').childNodes.length)conLog('Admin console. Type /help')}else $('conin').blur()}
+$('conin').onkeydown=e=>{e.stopPropagation();if(e.code==='Enter'){const v=$('conin').value;$('conin').value='';if(v.trim()){conLog('> '+v);runCmd(v).catch(err=>conLog('Error: '+err.message,1))}}else if(e.code==='Escape'||e.code==='Backquote'){e.preventDefault();toggleCon(false)}};
+function adminInit(){$('conb').classList.toggle('hide',!isAdmin());$('conb').onclick=()=>toggleCon(true);if(!isAdmin())toggleCon(false)}
+async function findUid(n){if(!n)throw new Error('Missing username');if(n.toLowerCase()==='me'||(prof&&n.toLowerCase()===String(prof.name).toLowerCase()))return uid;
+  const q=await db.collection('users').where('name','==',n).limit(1).get();if(q.empty)throw new Error('No account named '+n+' (exact capitalization)');return q.docs[0].id}
+function sendCmd(t,c,a){if(t===uid){applyCmd({c,a});return Promise.resolve()}return rtdb.ref('cmds/'+t).set({c,a:a||0,t:TS()})}
+async function runCmd(line){if(!isAdmin())return;const w=line.trim().replace(/^\//,'').split(/\s+/),c=(w.shift()||'').toLowerCase();
+  if(c==='help')return conLog('/freeze user [secs] · /unfreeze user · /ban user · /disable shots|steals|blocks for user · /enable shots|steals|blocks for user · /fly user · /win game');
+  if(c==='win'){if(!running)throw new Error('No game is running');if(NET){rtdb.ref('cmds/'+NET.opp).set({c:'lose',t:TS()});setTimeout(()=>endGame(true,'Admin victory'),700)}else endGame(true,'Admin victory');return conLog('Game won')}
+  if(c==='disable'||c==='enable'){const what=(w[0]||'').toLowerCase().replace(/s?$/,'s'),n=w.slice(1).filter(x=>x.toLowerCase()!=='for')[0];if(!['shots','steals','blocks'].includes(what))throw new Error('Use shots, steals or blocks');
+    await sendCmd(await findUid(n),c,what);return conLog(c+'d '+what+' for '+n)}
+  if(['freeze','unfreeze','ban','fly'].includes(c)){const n=w[0],t=await findUid(n);
+    if(c==='ban'){if(t===uid)throw new Error("You can't ban yourself");const d={name:n,t:Date.now()};await db.doc('bans/'+t).set(d);await db.doc('bans/'+em(n)).set(d);await sendCmd(t,'ban');await db.doc('leaderboard/'+t).delete().catch(()=>{});await db.doc('users/'+t).delete();return conLog(n+' banned and wiped')}
+    await sendCmd(t,c,c==='freeze'?(+w[1]||0):0);return conLog(c+' sent to '+n)}
+  throw new Error('Unknown command. Type /help')}
+function applyCmd(v){const c=v.c;
+  if(c==='freeze'){ADM.frz=v.a>0?+v.a:-1;say('You were frozen by an admin')}
+  else if(c==='unfreeze'){ADM.frz=0;say('You were unfrozen')}
+  else if(c==='fly'){ADM.fly=!ADM.fly;say(ADM.fly?'Fly on · jump = up · sprint = down':'Fly off')}
+  else if(c==='disable'||c==='enable'){ADM.dis[v.a]=c==='disable'?1:0;say(v.a+(c==='disable'?' disabled':' enabled')+' by an admin')}
+  else if(c==='ban')selfBan();
+  else if(c==='lose')endGame(false,'Game ended by an admin')}
+function listenCmds(){if(!rtdb||!uid)return;ADM.frz=0;ADM.fly=false;Object.assign(ADM.dis,{shots:0,steals:0,blocks:0});if(cmdRef)cmdRef.off();cmdRef=rtdb.ref('cmds/'+uid);
+  cmdRef.on('value',x=>{const v=x.val();if(!v||!v.t||nowS()-v.t>20000||v.t<=lastCmd)return;lastCmd=v.t;applyCmd(v)},()=>{})}
 
 // ===== LOGIN / MENU =====
 const em=n=>n.toLowerCase().replace(/[^a-z0-9]/g,'')+'@54hoops.app';
@@ -126,17 +162,31 @@ async function register(n,p){
   await db.runTransaction(async t=>{const r=db.doc('counters/users'),s=await t.get(r),k=(s.exists?s.data().n:0)+1;
     t.set(r,{n:k});t.set(db.doc('users/'+c.user.uid),{id:k,name:n,ankles:0,made:0,perfects:0,blocks:0})});
 }
-$('reg').onclick=async()=>{try{await register($('u').value.trim(),$('p').value)}catch(e){console.error(e);$('err').textContent=msg(e)}};
-$('login').onclick=async()=>{try{await auth.signInWithEmailAndPassword(em($('u').value),$('p').value)}catch(e){console.error(e);$('err').textContent=msg(e)}};
+$('reg').onclick=async()=>{try{if(await nameBanned($('u').value)){banScreen();return}await register($('u').value.trim(),$('p').value)}catch(e){console.error(e);$('err').textContent=msg(e)}};
+$('login').onclick=async()=>{try{if(await nameBanned($('u').value)){banScreen();return}await auth.signInWithEmailAndPassword(em($('u').value),$('p').value)}catch(e){console.error(e);$('err').textContent=msg(e)}};
 $('guest').onclick=async()=>{prof=null;try{if(!auth)throw 0;await auth.signInAnonymously()}catch(e){$('who').textContent='Guest (offline)';ecoLoad();show('menu')}};
-$('out').onclick=()=>{inQ=false;cancelJoin();unwatchStats();stopHB();if(rtdb&&uid){rtdb.ref('presence/'+uid).remove().catch(()=>{});rtdb.ref('queue/'+uid).remove().catch(()=>{})}uid=null;auth&&auth.signOut();show('auth')};
+$('out').onclick=()=>{prof=null;adminInit();inQ=false;cancelJoin();unwatchStats();stopHB();if(rtdb&&uid){rtdb.ref('presence/'+uid).remove().catch(()=>{});rtdb.ref('queue/'+uid).remove().catch(()=>{})}uid=null;auth&&auth.signOut();show('auth')};
 if(auth)auth.onAuthStateChanged(async u=>{if(!u)return;uid=u.uid;if(u.isAnonymous){prof=null;$('who').textContent='Guest';ecoLoad();show('menu');return}
+  try{const bn=await db.doc('bans/'+uid).get();if(bn.exists){selfBan();return}}catch(e){}
   for(let i=0;i<8;i++){const s=await db.doc('users/'+uid).get();if(s.exists){prof=s.data();break}await new Promise(r=>setTimeout(r,500))}
-  if(prof){$('who').textContent=`#${prof.id}  ${prof.name}`;ecoLoad();show('menu')}});
-function stat(k){coin(k);if(!prof)return;prof[k]++;db.doc('users/'+uid).update({[k]:firebase.firestore.FieldValue.increment(1)}).catch(()=>{})}
+  if(prof){$('who').textContent=`#${prof.id}  ${prof.name}`;ecoLoad();adminInit();listenCmds();syncLB();show('menu')}});
+function stat(k){coin(k);if(!prof)return;prof[k]++;const inc={[k]:firebase.firestore.FieldValue.increment(1)};db.doc('users/'+uid).update(inc).catch(()=>{});db.doc('leaderboard/'+uid).update(inc).catch(()=>{})}
 $('stats').onclick=()=>{if(!prof){alert('Log in to track stats');return}
   $('grid').innerHTML=[['ankles','Ankles broken'],['made','Shots made'],['perfects','Perfect shots'],['blocks','Blocks']].map(([k,l])=>`<div><b>${prof[k]}</b><span>${l}</span></div>`).join('');show('statp')};
 $('back').onclick=()=>show('menu');
+// ===== LEADERBOARD =====
+document.body.insertAdjacentHTML('beforeend','<div id="lb" class="screen hide"><div class="card wide"><h1>Leaderboard</h1><div class="tabs" id="lbt"><button data-s="made" class="on">Shots</button><button data-s="perfects">Perfects</button><button data-s="blocks">Blocks</button><button data-s="ankles">Ankles</button></div><div id="lbl"></div><button id="lbback">Back</button></div></div>');
+document.head.appendChild(Object.assign(document.createElement('style'),{textContent:'#lbl{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto;text-align:left}.lbr{display:flex;gap:12px;align-items:center;background:#0d0d12;border-radius:10px;padding:10px 14px;font-size:15px;animation:rise .4s both}.lbr.me{border:1px solid #ff7a2a}.lbr i{font-style:normal;width:28px;color:#99a;font-weight:800}.lbr:nth-child(-n+3) i{color:#ffd23a}.lbr span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lbr b{color:#ff7a2a;font-size:18px}'}));
+SCR.push('lb');let lbs='made';
+// public copy of just the name + 4 stats, so the users collection can stay private
+async function syncLB(){if(!prof||!db||!uid)return;try{const r=db.doc('leaderboard/'+uid);if(!(await r.get()).exists)await r.set({id:prof.id,name:prof.name,ankles:prof.ankles||0,made:prof.made||0,perfects:prof.perfects||0,blocks:prof.blocks||0})}catch(e){}}
+async function loadLB(){const box=$('lbl');box.textContent='Loading…';document.querySelectorAll('#lbt button').forEach(b=>b.classList.toggle('on',b.dataset.s===lbs));
+  try{if(!db||!uid)throw 0;const q=await db.collection('leaderboard').orderBy(lbs,'desc').limit(20).get();box.textContent='';let r=0;
+    q.forEach(d=>{const v=d.data();if(!(v[lbs]>0))return;const row=document.createElement('div'),a=document.createElement('i'),n=document.createElement('span'),c=document.createElement('b');
+      row.className='lbr'+(d.id===uid?' me':'');a.textContent=++r;n.textContent='#'+v.id+'  '+v.name;c.textContent=v[lbs];row.append(a,n,c);box.appendChild(row)});
+    if(!r)box.textContent='No scores yet. Be the first!'}catch(e){box.textContent='Leaderboard unavailable right now.'}}
+document.querySelectorAll('#lbt button').forEach(b=>b.onclick=()=>{lbs=b.dataset.s;loadLB()});
+$('lbb').onclick=()=>{show('lb');loadLB()};$('lbback').onclick=()=>show('menu');
 $('bot').onclick=()=>startGame();
 
 // ===== ONLINE QUEUE =====
@@ -224,7 +274,7 @@ function onAct(v,N){if(!v||NET!==N||v.n<=(N.aon||0))return;N.aon=v.n;const me=P[
   if(v.k==='s'){me.ball=false;me.ch=0;me.m=0;$('meter').style.display='none';q.ball=true;q.dl=4;q.dt=0;say('Stolen!')}
   else if(v.k==='a'){q.fall=1.5;q.ch=0;stat('ankles');say('ANKLES BROKEN!')}
   else if(v.k==='b'&&flight&&flight.by===me){flight=null;loose={x:me.x,y:2.4,z:me.z,vx:q.x-me.x,vy:2,vz:q.z-me.z};say('Shot blocked')}}
-function netBlock(v){const me=P[0];if(!flight||me.fall>0||me.y<=.4||Math.hypot(me.x-v.x,me.z-v.z)>2.4)return;
+function netBlock(v){const me=P[0];if(!flight||ADM.dis.blocks||me.fall>0||me.y<=.4||Math.hypot(me.x-v.x,me.z-v.z)>2.4)return;
   stat('blocks');say('BLOCKED!');netAct('b');flight=null;loose={x:v.x,y:2.4,z:v.z,vx:me.x-v.x,vy:2,vz:me.z-v.z}}
 
 // ===== WORLD =====
@@ -261,13 +311,15 @@ function lockHint(){$('lockhint').classList.toggle('hide',!running||paused||isLo
 function lock(){try{const r=$('c').requestPointerLock();if(r&&r.catch)r.catch(()=>{})}catch(e){}setTimeout(lockHint,60)}
 function act(a,down){if(!running||paused)return;const p=P[0];if(!p)return;
   if(down){
-    if(a==='jump')jump(p);else if(a==='dribble')dribble(p);else if(a==='steal')steal(p,P[1]);else if(a==='cancel')cancelShot(p);else if(a==='cam'){set.cam=(set.cam+1)%4;save();say(CAMS[set.cam].n+' camera')}
-    else if(a==='shoot'){if(p.ball&&!p.fall&&!p.ch&&!p.air&&!flight){p.ch=1;p.m=0;$('meter').style.display='block'}}
+    if(a==='jump'){if(ADM.frz===0)jump(p)}else if(a==='dribble')dribble(p);else if(a==='steal')steal(p,P[1]);else if(a==='cancel')cancelShot(p);else if(a==='cam'){set.cam=(set.cam+1)%4;save();say(CAMS[set.cam].n+' camera')}
+    else if(a==='shoot'){if(ADM.dis.shots){say('Shots are disabled for you');return}if(p.ball&&!p.fall&&!p.ch&&!p.air&&!flight){p.ch=1;p.m=0;$('meter').style.display='block'}}
     else if(a==='sprint'&&set.toggleSprint)togSpr=!togSpr}
   else if(a==='shoot'&&p.ch)release(p)}
 function bindInput(){
   addEventListener('keydown',e=>{
     if(cap){capKey(e);return}
+    if(e.code==='Backquote'&&isAdmin()&&!conOpen){e.preventDefault();toggleCon(true);return}
+    if(conOpen)return;
     if(e.code==='Escape'){if(running){e.preventDefault();if(!e.repeat){escAt=performance.now();setPause(!paused)}}return}
     if(!running)return;
     if((actsOf(e.code).length||e.code==='Space')&&!e.ctrlKey&&!e.metaKey)e.preventDefault();
@@ -402,7 +454,7 @@ function startGame(){const was=running;show(null);$('pause').classList.add('hide
   lock();lockHint();if(!was)raf=requestAnimationFrame(loop)}
 function jump(p){if(p.y<=.01&&!p.fall&&!p.ch&&!p.fin){p.vy=5;p.air=true;p.jx=(p.dxn||0)*4.2;p.jz=(p.dzn||0)*4.2}}
 function dribble(p){if(p.ball&&p.dl>0&&p.dt<=0&&!p.fall&&!p.ch&&!p.air){p.dl--;p.dt=DUR;p.dh0=p.hand;p.hand=1-p.hand;p.dc++}}
-function steal(d,h){if(!h||d.cd>0||d.fall>0||d.ball)return;d.stl=.3;
+function steal(d,h){if(!h||d.cd>0||d.fall>0||d.ball||(d===P[0]&&ADM.dis.steals))return;d.stl=.3;
   if(Math.hypot(d.x-h.x,d.z-h.z)>1.6){d.cd=.25;return}d.cd=.7;if(!h.ball)return;
   if(h.dt>0){d.fall=1.5;d.ch=0;if(h===P[0])stat('ankles');say(h===P[0]?'ANKLES BROKEN!':'You got crossed!');if(NET&&d===P[0])netAct('a')}
   else{h.ball=false;h.ch=0;d.ball=true;d.dl=4;d.dt=0;d.hand=0;$('meter').style.display='none';say(d===P[0]?'STEAL!':'Stolen!');if(NET&&d===P[0])netAct('s')}}
@@ -419,7 +471,7 @@ function release(p){const dd=Math.hypot(p.x-H.x,p.z-H.z);if(dd<3.8&&p.ball&&!p.a
 function cancelShot(p){if(!p.ch)return;p.ch=0;p.m=0;p.fol=.35;if(p===P[0])$('meter').style.display='none'}
 function releaseJump(p){p.ch=0;const me=p===P[0];if(me)$('meter').style.display='none';const o=P[me?1:0],m=p.m,d=Math.hypot(p.x-H.x,p.z-H.z),by=ball.position.y;
   p.ball=false;p.dxn=p.dzn=0;p.m=0;p.fol=.55;jump(p);
-  if(!NET&&o.y>.4&&Math.hypot(o.x-p.x,o.z-p.z)<2.4){if(o===P[0])stat('blocks');say(o===P[0]?'BLOCKED!':'Shot blocked');o.ball=false;loose={x:p.x,y:2.4,z:p.z,vx:(o.x-p.x),vy:2,vz:(o.z-p.z)};return}
+  if(!NET&&o.y>.4&&!(o===P[0]&&ADM.dis.blocks)&&Math.hypot(o.x-p.x,o.z-p.z)<2.4){if(o===P[0])stat('blocks');say(o===P[0]?'BLOCKED!':'Shot blocked');o.ball=false;loose={x:p.x,y:2.4,z:p.z,vx:(o.x-p.x),vy:2,vz:(o.z-p.z)};return}
   const yaw=me?p.yaw+cl(wr(crossYaw(p)-p.yaw),-.3,.3):Math.atan2(H.x-p.x,H.z-p.z)+(Math.random()-.5)*BD[set.diff].err;
   const dep=cl((m-.95)*6,-2.5,2.5),L=Math.max(1.2,d+dep),lx=p.x+Math.sin(yaw)*L-H.x,lz=p.z+Math.cos(yaw)*L-H.z,perfect=m>=.86&&m<=1,make=Math.hypot(lx,lz)<=.5+.04*d;
   if(me&&perfect&&make){stat('perfects');const e=$('perfect');e.classList.remove('go');void e.offsetWidth;e.classList.add('go')}
@@ -434,7 +486,7 @@ function finTick(dt){if(!running||(paused&&!NET))return;for(const q of P){const 
   if(!f.rel&&u>=.55){f.rel=1;
     if(!q.ball){q.fin=null;q.cel=null;continue}
     q.ball=false;const o=P[me?1:0];
-    if(!NET&&o.y>.4&&Math.hypot(o.x-q.x,o.z-q.z)<2){if(o===P[0])stat('blocks');say(o===P[0]?'BLOCKED!':'Shot blocked');loose={x:q.x,y:2.4,z:q.z,vx:o.x-q.x,vy:2,vz:o.z-q.z}}
+    if(!NET&&o.y>.4&&!(o===P[0]&&ADM.dis.blocks)&&Math.hypot(o.x-q.x,o.z-q.z)<2){if(o===P[0])stat('blocks');say(o===P[0]?'BLOCKED!':'Shot blocked');loose={x:q.x,y:2.4,z:q.z,vx:o.x-q.x,vy:2,vz:o.z-q.z}}
     else{const fl=startFlight(q,{x:q.x,y:dk?RIM+.45:q.y+2.2,z:q.z},f.make?0:.45,f.make?0:.1,f.make);fl.dur=dk?.22:.4;fl.h=dk?.12:.6;
       if(me&&f.perfect&&f.make&&!dk){stat('perfects');const el=$('perfect');el.classList.remove('go');void el.offsetWidth;el.classList.add('go')}
       if(NET&&me)netShot(fl)}}
@@ -478,14 +530,14 @@ function loop(n){if(!running)return;raf=requestAnimationFrame(loop);const dt=Mat
  if(!frozen){t+=dt;
   let dx=0,dz=0;const s=Math.sin(cy),c=Math.cos(cy),live=!paused;
   if(live){if(anyDown('fwd')){dx-=s;dz-=c}if(anyDown('back')){dx+=s;dz+=c}if(anyDown('right')){dx+=c;dz-=s}if(anyDown('left')){dx-=c;dz+=s}}
-  const hold=NET&&performance.now()<NET.hold,still=p.ch||hold||p.fall||p.cel,want=live&&(set.toggleSprint?togSpr:anyDown('sprint'));
+  if(ADM.frz>0)ADM.frz=Math.max(0,ADM.frz-dt);const hold=NET&&performance.now()<NET.hold,still=p.ch||hold||p.fall||p.cel||ADM.frz!==0,want=live&&(set.toggleSprint?togSpr:anyDown('sprint'));
   if(set.toggleSprint&&!((dx||dz)&&!still))togSpr=false;
   p.sp=!!(want&&(dx||dz)&&!still&&!p.air);
   move(p,still?0:dx,still?0:dz,dt,p.sp?(p.ball?(p.dt>0?4.6:5.6):6.3):(p.ball&&p.dt>0?3.4:4.4));
   if(p.ch&&!paused)p.ty=crossYaw(p);
   NET?netTick(p,dt):bot(b,p,dt);
   P.forEach(q=>{q.dt=Math.max(0,q.dt-dt);q.fall=Math.max(0,q.fall-dt);q.cd=Math.max(0,q.cd-dt);q.stl=Math.max(0,q.stl-dt);q.fol=Math.max(0,q.fol-dt);if(q.cel){q.cel.t+=dt;if(q.cel.t>=q.cel.D)q.cel=null}
-    q.vy-=14*dt;q.y=Math.max(0,q.y+q.vy*dt);if(q.y===0&&q.vy<0){q.vy=0;q.air=false}
+    if(q===p&&ADM.fly&&!q.fin){q.vy=((live&&anyDown('jump'))?5:0)-((live&&anyDown('sprint'))?5:0);q.y=cl(q.y+q.vy*dt,0,9);q.air=false}else{q.vy-=14*dt;q.y=Math.max(0,q.y+q.vy*dt);if(q.y===0&&q.vy<0){q.vy=0;q.air=false}}
     if(q.rem&&q.tgt){const r=q.tgt;
       if(r.e!==q.re){q.re=r.e;q.x=r.x;q.z=r.z;q.rd=r.d;sepCheck(p,q)}
       const k2=Math.min(1,dt*15),mx=r.x-q.x,mz=r.z-q.z;q.x+=mx*k2;q.z+=mz*k2;q.y=r.y;q.mv=Math.hypot(mx,mz)>.06?1:0;q.air=r.y>.05;q.ty=r.yaw;q.sp=!!r.s;
